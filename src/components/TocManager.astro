@@ -1,0 +1,156 @@
+---
+// src/components/TocManager.astro
+// 这个组件是"目录"功能的大脑，它只包含客户端脚本，
+// 负责在每次页面切换后，动态地生成和管理目录。
+---
+<script>
+    // 函数：添加滚动监听，实现当前章节高亮
+    function addScrollListener() {
+        const tocLinks = document.querySelectorAll('#toc-placeholder .toc-list a');
+        if (tocLinks.length === 0) return;
+
+        let currentActiveId = null;
+        
+        // 清理之前的观察器
+        if (window.tocObserver) {
+            window.tocObserver.disconnect();
+        }
+        
+        window.tocObserver = new IntersectionObserver(entries => {
+            let topmostEntry = null;
+            let topmostTop = Infinity;
+            
+            entries.forEach(entry => {
+                if (entry.isIntersecting) {
+                    const top = entry.boundingClientRect.top;
+                    if (top < topmostTop) {
+                        topmostTop = top;
+                        topmostEntry = entry;
+                    }
+                }
+            });
+
+            if (topmostEntry) {
+                const id = topmostEntry.target.getAttribute('id');
+                if (id && id !== currentActiveId) {
+                    // 移除所有激活状态
+                    const allActiveLinks = document.querySelectorAll('#toc-placeholder .toc-list a.active');
+                    allActiveLinks.forEach(link => {
+                        link.classList.remove('active');
+                    });
+                    
+                    // 添加新的激活状态
+                    const newActiveLink = document.querySelector(`#toc-placeholder .toc-list a[href="#${id}"]`);
+                    if (newActiveLink) {
+                        newActiveLink.classList.add('active');
+                        currentActiveId = id;
+                        
+                        // 调试信息 - 可以在部署前删除
+                        console.log('TOC: Active section changed to:', id);
+                    }
+                }
+            }
+        }, { 
+            rootMargin: '-10% 0px -70% 0px', 
+            threshold: [0, 0.25, 0.5, 0.75, 1]
+        });
+
+        // 观察所有标题元素 - 适配vhAstro-Theme的文章结构
+        const headingSelector = '.main-inner-content h1[id], .main-inner-content h2[id], .main-inner-content h3[id], .main-inner-content h4[id], .main-inner-content h5[id], .main-inner-content h6[id], article h1[id], article h2[id], article h3[id], article h4[id], article h5[id], article h6[id]';
+        const headings = document.querySelectorAll(headingSelector);
+        
+        headings.forEach(heading => {
+            window.tocObserver.observe(heading);
+        });
+        
+        // 初始化时设置第一个标题为激活状态
+        if (headings.length > 0 && !currentActiveId) {
+            const firstHeadingId = headings[0].getAttribute('id');
+            if (firstHeadingId) {
+                const firstLink = document.querySelector(`#toc-placeholder .toc-list a[href="#${firstHeadingId}"]`);
+                if (firstLink) {
+                    firstLink.classList.add('active');
+                    currentActiveId = firstHeadingId;
+                }
+            }
+        }
+    }
+
+    // 函数：根据扫描到的标题，构建目录的 HTML
+    function buildTocHtml(headings) {
+        const listItems = headings.map(heading => `
+            <li class="toc-item depth-${heading.depth}">
+                <a href="#${heading.slug}" data-toc-link="${heading.slug}">
+                    <span class="toc-text">${heading.text}</span>
+                </a>
+            </li>
+        `).join('');
+
+        return `
+            <div class="toc-wrapper">
+                <h3 class="toc-title">目录</h3>
+                <ul class="toc-list">${listItems}</ul>
+            </div>
+        `;
+    }
+
+    // 主函数：管理目录的显示与隐藏
+    function manageToc() {
+        const placeholder = document.getElementById('toc-placeholder');
+        if (!placeholder) return;
+
+        const isArticlePage = window.location.pathname.startsWith('/article/');
+        if (!isArticlePage) {
+            placeholder.innerHTML = '';
+            placeholder.style.display = 'none';
+            // 清理观察器
+            if (window.tocObserver) {
+                window.tocObserver.disconnect();
+                window.tocObserver = null;
+            }
+            return;
+        }
+
+        const headingElements = document.querySelectorAll('.main-inner-content h1[id], .main-inner-content h2[id], .main-inner-content h3[id], .main-inner-content h4[id], .main-inner-content h5[id], .main-inner-content h6[id], article h1[id], article h2[id], article h3[id], article h4[id], article h5[id], article h6[id]');
+        
+        if (headingElements.length === 0) {
+            placeholder.innerHTML = '';
+            placeholder.style.display = 'none';
+            return;
+        }
+
+        const headings = Array.from(headingElements).map(el => ({
+            depth: parseInt(el.tagName.substring(1), 10),
+            text: (el.textContent || '').trim(),
+            slug: el.id
+        }));
+        
+        const validHeadings = headings.filter(h => h.text && h.slug && h.depth >= 1 && h.depth <= 6);
+
+        if (validHeadings.length > 0) {
+            const tocHtml = buildTocHtml(validHeadings);
+            placeholder.innerHTML = tocHtml;
+            placeholder.style.display = 'block';
+            
+            // 延迟执行滚动监听，确保DOM完全渲染
+            setTimeout(() => {
+                addScrollListener();
+            }, 100);
+        } else {
+            placeholder.innerHTML = '';
+            placeholder.style.display = 'none';
+        }
+    }
+
+    // 页面加载完成后初始化
+    document.addEventListener('astro:after-swap', manageToc);
+    document.addEventListener('DOMContentLoaded', manageToc);
+    
+    // 清理函数
+    document.addEventListener('astro:before-swap', () => {
+        if (window.tocObserver) {
+            window.tocObserver.disconnect();
+            window.tocObserver = null;
+        }
+    });
+</script>

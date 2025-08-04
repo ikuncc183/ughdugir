@@ -1,0 +1,177 @@
+<!-- 
+  This is the final version of the SakuraEffect component.
+  - Features multiple, randomized petal shapes based on user reference.
+  - Petal size has been adjusted to be 5x larger than the previous version.
+  - Code has been refactored for shape variation.
+  - Removed circular shape and doubled the density.
+  - Trajectory is now a natural, random fall from the top of the screen.
+  - Density increased again by another factor of two.
+-->
+<canvas id="sakura-canvas"></canvas>
+
+<style>
+  #sakura-canvas {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    pointer-events: none; /* Allows clicks to pass through the canvas */
+    z-index: 9999;
+  }
+</style>
+
+<script>
+  const canvas = document.getElementById('sakura-canvas') as HTMLCanvasElement;
+  if (canvas) {
+    const ctx = canvas.getContext('2d');
+    let petals: Petal[] = [];
+
+    canvas.width = window.innerWidth;
+    canvas.height = window.innerHeight;
+
+    // --- NEW: Array of functions to draw different petal shapes ---
+    const petalShapes = [
+      // Shape 1: Classic notched petal
+      (ctx, s) => {
+        ctx.beginPath();
+        const scale = s / 10;
+        ctx.moveTo(0, 0);
+        ctx.bezierCurveTo(scale, -scale*2, scale*2, -scale*2, scale*2, 0);
+        ctx.bezierCurveTo(scale*2, scale*2, scale, scale*2, 0, scale*4);
+        ctx.bezierCurveTo(-scale, scale*2, -scale*2, scale*2, -scale*2, 0);
+        ctx.bezierCurveTo(-scale*2, -scale*2, -scale, -scale*2, 0, 0);
+        ctx.fill();
+        ctx.closePath();
+      },
+      // Shape 2: Simple, slightly curved petal
+      (ctx, s) => {
+        ctx.beginPath();
+        const scale = s / 10;
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(scale * 2, scale * 2, scale * 4, 0);
+        ctx.quadraticCurveTo(scale * 2, -scale * 2, 0, 0);
+        ctx.fill();
+        ctx.closePath();
+      },
+      // Shape 3: Fuller, more rounded petal
+      (ctx, s) => {
+        ctx.beginPath();
+        const scale = s / 10;
+        ctx.arc(0, 0, scale * 2, 0, Math.PI);
+        ctx.quadraticCurveTo(-scale * 2, -scale * 2, 0, 0);
+        ctx.fill();
+        ctx.closePath();
+      },
+      // Shape 4: Long, thin, stretched petal
+      (ctx, s) => {
+        ctx.beginPath();
+        const scale = s / 10;
+        ctx.moveTo(0, 0);
+        ctx.bezierCurveTo(scale * 3, scale, scale * 3, -scale * 2, scale * 5, -scale * 3);
+        ctx.bezierCurveTo(scale * 2, -scale, 0, 0, 0, 0);
+        ctx.fill();
+        ctx.closePath();
+      },
+      // Shape 5: A slightly twisted petal
+      (ctx, s) => {
+        ctx.beginPath();
+        const scale = s / 10;
+        ctx.moveTo(0, 0);
+        ctx.quadraticCurveTo(scale, -scale * 2, scale * 3, -scale * 2);
+        ctx.quadraticCurveTo(scale * 2, 0, 0, 0);
+        ctx.fill();
+        ctx.closePath();
+      }
+      // Shape 6 (circular) has been removed.
+    ];
+
+    class Petal {
+      x: number;
+      y: number;
+      size: number;
+      speedY: number;
+      angle: number;
+      spin: number;
+      sway: number;
+      color: string;
+      depth: number;
+      shapeId: number; // To store which shape this petal is
+
+      constructor() {
+        this.depth = Math.random();
+        // Adjusted size to be 5x larger than the previous version
+        this.size = ((this.depth * 8) + 5) * 7.5; 
+        // Start from a random horizontal position
+        this.x = Math.random() * canvas.width;
+        this.y = Math.random() * -canvas.height; // Start above the screen
+        this.speedY = (this.depth * 0.8) + 0.7;
+        this.angle = Math.random() * Math.PI * 2;
+        this.spin = Math.random() < 0.5 ? -1 : 1;
+        // Increased sway for more horizontal movement
+        this.sway = Math.random() * 1.5 + 0.5;
+        this.color = `rgba(255, 192, 203, ${this.depth * 0.5 + 0.5})`;
+        // Assign a random shape to each petal
+        this.shapeId = Math.floor(Math.random() * petalShapes.length);
+      }
+
+      update() {
+        // Only vertical speed is fixed
+        this.y += this.speedY;
+        // Horizontal movement is now a gentle, random sway
+        this.x += Math.sin(this.angle) * this.sway;
+        this.angle += 0.03 * this.spin;
+
+        // Reset petal if it goes off screen (bottom, left, or right)
+        if (this.y > canvas.height + this.size || this.x < -this.size || this.x > canvas.width + this.size) {
+          // Reset to a random position at the top
+          this.x = Math.random() * canvas.width;
+          this.y = -this.size; // Start just above the screen
+        }
+      }
+
+      draw() {
+        ctx.save();
+        ctx.translate(this.x, this.y);
+        ctx.rotate(this.angle);
+        
+        ctx.shadowColor = 'rgba(255, 255, 255, 0.7)';
+        ctx.shadowBlur = 5; // Reduced blur for smaller petals
+
+        ctx.fillStyle = this.color;
+        
+        // Call the specific shape drawing function
+        petalShapes[this.shapeId](ctx, this.size);
+        
+        ctx.restore();
+      }
+    }
+
+    function init() {
+      // Density increased again by another factor of two.
+      const numberOfPetals = Math.floor(window.innerWidth / 38);
+      for (let i = 0; i < numberOfPetals; i++) {
+        petals.push(new Petal());
+      }
+    }
+
+    function animate() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      for (let i = 0; i < petals.length; i++) {
+        petals[i].update();
+        petals[i].draw();
+      }
+      requestAnimationFrame(animate);
+    }
+
+    window.addEventListener('resize', () => {
+      canvas.width = window.innerWidth;
+      canvas.height = window.innerHeight;
+      petals = [];
+      init();
+    });
+
+    init();
+    animate();
+  }
+</script>
